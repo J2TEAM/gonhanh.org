@@ -141,8 +141,10 @@ make build       # Full build: test → core → macos
 
 make release     # Release workflow
                  # - Bumps version
+                 # - Generates release notes with Codex CLI
                  # - Creates git tag
                  # - Triggers GitHub Actions CI/CD
+                 # Requires: codex and gh in PATH
 ```
 
 ### Installation
