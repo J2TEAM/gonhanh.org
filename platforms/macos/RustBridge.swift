@@ -1354,6 +1354,11 @@ private func keyboardCallback(
     // then clear buffer. Engine sets pending_capitalize when it sees Enter key.
     // Also handle auto-restore and shortcut results (same as ESC handling)
     if keyCode == 0x24 || keyCode == 0x4C { // Return (0x24) or Enter/Numpad (0x4C)
+        if isDiscordFocusedContext() {
+            RustBridge.clearBufferAll()
+            return Unmanaged.passUnretained(event)
+        }
+
         let (method, delays) = detectMethod()
 
         if let (bs, chars, keyConsumed) = RustBridge.processKey(keyCode: keyCode, caps: caps, ctrl: bypassIME, shift: shift) {
@@ -1588,6 +1593,37 @@ func getDetectedDefault(for bundleId: String) -> (method: String, delays: (UInt3
 func clearDetectionCache() {
     DetectionCache.clear()
     DetectionCache.activeProfile = nil
+}
+
+private func isDiscordApp(_ app: NSRunningApplication?) -> Bool {
+    guard let app else { return false }
+    let bundleId = app.bundleIdentifier?.lowercased() ?? ""
+    let name = app.localizedName?.lowercased() ?? ""
+    return bundleId.contains("discord") || name.contains("discord")
+}
+
+private func isDiscordFocusedContext() -> Bool {
+    if isDiscordApp(NSWorkspace.shared.frontmostApplication) {
+        return true
+    }
+
+    let systemWide = axSystemWideBounded()
+    var focused: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(systemWide, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
+          let focused
+    else {
+        return false
+    }
+
+    let axEl = focused as! AXUIElement
+    var pid: pid_t = 0
+    guard AXUIElementGetPid(axEl, &pid) == .success,
+          let app = NSRunningApplication(processIdentifier: pid)
+    else {
+        return false
+    }
+
+    return isDiscordApp(app)
 }
 
 private func detectMethod() -> (InjectionMethod, (UInt32, UInt32, UInt32)) {
