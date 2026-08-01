@@ -2198,3 +2198,17 @@ fn bug_dayddr_expect_daydr() {
         ("dodf", "đò"),
     ]);
 }
+
+// =============================================================================
+// BUG: "chucwsc" -> expect "chứcc" (auto-restore ON)
+// Typing "chức" then an extra final 'c' yields buffer "chứcc". That buffer is
+// invalid Vietnamese only because of the doubled final consonant, so the loose
+// English check wrongly restored the raw keystrokes "chucwsc". Telex never emits
+// a doubled final consonant on its own, so the duplicate is intentional Vietnamese.
+// (Product decision: keep the Vietnamese buffer for this pattern.)
+// =============================================================================
+
+#[test]
+fn bug_chucwsc_expect_chucc() {
+    telex_auto_restore(&[("chucwsc", "chứcc"), ("chucwsc ", "chứcc ")]);
+}

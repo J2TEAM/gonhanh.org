@@ -4745,6 +4745,24 @@ impl Engine {
             return None;
         }
 
+        // EXTRA DUPLICATE FINAL CONSONANT: keep the Vietnamese buffer when it is a valid
+        // Vietnamese syllable (carrying a diacritic) followed by an extra, user-typed
+        // duplicate of its final consonant. Example: typing "chức" then pressing 'c' again
+        // yields buffer "chứcc". Telex never generates a doubled final consonant on its own,
+        // so the duplicate is a deliberate keystroke → intentional Vietnamese, not English.
+        // Without this, "chứcc" reads as invalid Vietnamese and the loose English check
+        // wrongly restores the raw keystrokes "chucwsc".
+        //
+        // Exclude raw keystrokes that ARE a known English word (e.g. "watts" → "ưátt"): those
+        // should still restore. Gibberish like "chucwsc" is not in the dictionary, so the
+        // Vietnamese buffer wins. (Rare English words missing from the dictionary — detest,
+        // retest, phonon — stay Vietnamese; this is the accepted trade-off for keeping "chứcc".)
+        if self.has_extra_duplicate_final_consonant()
+            && !english_dict::is_english_word(&self.get_raw_input_string())
+        {
+            return None;
+        }
+
         // VIETNAMESE PRIORITY: Only keep Vietnamese when buffer has Vietnamese-SPECIFIC marks
         // Vietnamese-specific: circumflex (ô,â,ê), horn (ơ,ư), breve (ă), stroke (đ)
         // These marks indicate intentional Vietnamese typing
@@ -5880,6 +5898,80 @@ impl Engine {
         }
 
         has_vowel
+    }
+
+    /// Detect a buffer that is a valid Vietnamese syllable with a diacritic, followed by
+    /// an extra duplicate of its final consonant (e.g. "chức" + 'c' → "chứcc").
+    ///
+    /// Telex never emits a doubled final consonant on its own, so the trailing duplicate is
+    /// a literal keystroke the user typed on top of a complete Vietnamese syllable. Requiring
+    /// the base (minus the duplicate) to be valid Vietnamese AND to carry a Vietnamese
+    /// diacritic (tone or vowel mark) keeps plain English words that merely end in a doubled
+    /// consonant (ball, hall, off, ...) out of this branch — their base is not valid Vietnamese
+    /// and/or has no diacritic, so they still auto-restore normally.
+    fn has_extra_duplicate_final_consonant(&self) -> bool {
+        // `iter()` yields a slice iterator over the contiguous buffer, so `as_slice()` borrows
+        // it directly — no allocation, and the cheap scalar checks below can short-circuit the
+        // common (non-matching) case before any Vec is built.
+        let chars = self.buf.iter().as_slice();
+        let n = chars.len();
+        // Need at least: core syllable + final consonant + its duplicate.
+        if n < 3 {
+            return false;
+        }
+
+        let last = chars[n - 1];
+        let prev = chars[n - 2];
+        // Trailing char must duplicate the previous one, be a plain consonant, and carry
+        // no Vietnamese mark/tone of its own (a diacritic there would not be a raw duplicate).
+        if last.key != prev.key
+            || !keys::is_consonant(last.key)
+            || last.has_tone()
+            || last.has_mark()
+        {
+            return false;
+        }
+
+        // The intentional-Vietnamese pattern is: complete a consonant-final syllable, apply
+        // Telex modifiers to it, then re-type that final consonant — so in the raw keystrokes
+        // the two duplicate consonants are separated ONLY by modifier keys (w/s/f/r/x/j) and by
+        // at least one of them. Example: "chucwsc" → the two 'c's straddle "w s".
+        //
+        // A genuine English double consonant does NOT match: it is either typed back-to-back
+        // ("howitt" → h-o-w-i-t-t, the 't's are adjacent → nothing between) or separated by
+        // another vowel/consonant ("detest" → d-e-t-e-s-t, an 'e' sits between the 't's). Both
+        // still restore normally.
+        let dup_key = last.key;
+        let Some(p2) = self.raw_input.iter().rposition(|(k, _, _)| *k == dup_key) else {
+            return false;
+        };
+        let Some(p1) = self.raw_input[..p2]
+            .iter()
+            .rposition(|(k, _, _)| *k == dup_key)
+        else {
+            return false;
+        };
+        let modifiers = [keys::W, keys::S, keys::F, keys::R, keys::X, keys::J];
+        if p2 - p1 < 2
+            || !self.raw_input[p1 + 1..p2]
+                .iter()
+                .all(|(k, _, _)| modifiers.contains(k))
+        {
+            return false;
+        }
+
+        // The buffer WITHOUT the trailing duplicate must be a valid Vietnamese syllable...
+        let base = &chars[..n - 1];
+        let base_keys: Vec<u16> = base.iter().map(|c| c.key).collect();
+        let base_tones: Vec<u8> = base.iter().map(|c| c.tone).collect();
+        if !is_valid_with_tones_and_foreign(&base_keys, &base_tones, self.allow_foreign_consonants)
+        {
+            return false;
+        }
+
+        // ...and must carry a Vietnamese diacritic (tone or vowel mark), proving intentional
+        // Vietnamese input rather than a plain English word ending in a doubled consonant.
+        base.iter().any(|c| c.has_tone() || c.has_mark())
     }
 
     /// Build raw chars from telex_double_raw (if stored) + subsequent raw_input,
