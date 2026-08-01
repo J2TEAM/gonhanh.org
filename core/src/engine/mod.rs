@@ -2594,9 +2594,12 @@ impl Engine {
             }
 
             // Special case: switching from circumflex (uô) to horn compound (ươ)
-            // For standalone uo compound (no final consonant), add horn to adjacent 'u'
+            // Add horn to the adjacent 'u' so every uo + w sequence becomes ươ.
+            // A final consonant does not change this: `buocow` must become `bươc`.
             if tone_type == ToneType::Horn && self.has_uo_compound() {
-                // Check if this is a standalone compound (o is last vowel, no final consonant)
+                // VNI keeps the historical behavior for an open `uo` syllable:
+                // only add horn to `u` when there is no final consonant.
+                // Telex applies the requested rule even when a final exists.
                 let has_final = target_positions.iter().any(|&pos| {
                     pos + 1 < self.buf.len()
                         && self
@@ -2604,11 +2607,28 @@ impl Engine {
                             .get(pos + 1)
                             .is_some_and(|c| !keys::is_vowel(c.key))
                 });
+                let should_add_horn_to_u = self.method == 0 || !has_final;
 
-                if !has_final {
+                if should_add_horn_to_u {
                     for &pos in &target_positions {
                         if let Some(c) = self.buf.get(pos) {
                             if c.key == keys::O {
+                                // In a `qu` initial, `u` is part of the consonant cluster
+                                // and must stay plain (e.g. `quơ`, not `qươ`).
+                                let is_qu_initial = pos > 0
+                                    && self.buf.get(pos - 1).is_some_and(|prev| {
+                                        prev.key == keys::U
+                                            && pos > 1
+                                            && self
+                                                .buf
+                                                .get(pos - 2)
+                                                .is_some_and(|initial| initial.key == keys::Q)
+                                    });
+
+                                if is_qu_initial {
+                                    continue;
+                                }
+
                                 // Add horn to adjacent 'u' for compound
                                 if pos > 0 {
                                     if let Some(prev) = self.buf.get_mut(pos - 1) {
