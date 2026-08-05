@@ -1158,9 +1158,71 @@ impl Engine {
             caps
         };
 
+        // A physical Shift+letter that changes a lowercase run to uppercase starts a
+        // new case segment (for example, `useEffect`). Telex modifiers from the
+        // lowercase segment must not consume the uppercase key. Restore that segment
+        // to its literal keystrokes, then continue tracking the complete identifier.
+        let shifted_case_prefix_is_english = self.english_auto_restore
+            && english_dict::is_english_word(&self.get_raw_input_string().to_lowercase());
+        let starts_shifted_case_segment = self.method == 0
+            && shift
+            && effective_caps
+            && keys::is_letter(key)
+            && !self.buf.is_empty()
+            && self
+                .raw_input
+                .last()
+                .is_some_and(|(_, previous_caps, _)| !previous_caps);
+
         // Record raw keystroke for ESC restore (letters and numbers only)
         if keys::is_letter(key) || keys::is_number(key) {
             self.raw_input.push((key, effective_caps, shift));
+        }
+
+        if starts_shifted_case_segment {
+            let backspace = self.buf.len() as u8;
+            let raw_chars: Vec<char> = if shifted_case_prefix_is_english {
+                self.raw_input
+                    .iter()
+                    .filter_map(|&(raw_key, raw_caps, raw_shift)| {
+                        utils::key_to_char_ext(raw_key, raw_caps, raw_shift)
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            };
+
+            self.buf.clear();
+            if shifted_case_prefix_is_english {
+                for &(raw_key, raw_caps, _) in &self.raw_input {
+                    self.buf.push(Char::new(raw_key, raw_caps));
+                }
+            } else {
+                // Preserve the already displayed Vietnamese segment and start a
+                // fresh composition buffer at the uppercase key.
+                self.raw_input.clear();
+                self.raw_input.push((key, effective_caps, shift));
+                self.buf.push(Char::new(key, effective_caps));
+            }
+            self.last_transform = None;
+            self.pending_breve_pos = None;
+            self.pending_u_horn_pos = None;
+            self.stroke_reverted = false;
+            self.had_mark_revert = false;
+            self.pending_mark_revert_pop = false;
+            self.had_any_transform = false;
+            self.had_vowel_triggered_circumflex = false;
+            self.had_circumflex_revert = false;
+            self.reverted_circumflex_key = None;
+            self.had_telex_transform = false;
+            self.telex_double_raw = None;
+            self.telex_double_raw_len = 0;
+
+            return if shifted_case_prefix_is_english {
+                Result::send(backspace, &raw_chars)
+            } else {
+                Result::none()
+            };
         }
 
         let result = self.process(key, effective_caps, shift);
@@ -5998,6 +6060,22 @@ impl Engine {
                     if let Some(ch) = utils::key_to_char_ext(key, caps, shift) {
                         result.push(ch);
                     }
+                }
+
+                // `ww` explicitly reverts the w→ư shortcut to one literal `w`.
+                // When the revert is the current action, preserve that composed
+                // result even for exact English auto-restore paths. Subsequent
+                // input (for example a third `w`) is handled by the normal
+                // Telex-double reconstruction below.
+                let just_reverted_w_shortcut =
+                    matches!(self.last_transform, Some(Transform::WShortcutSkipped))
+                        && self.raw_input.len() == self.telex_double_raw_len;
+                if just_reverted_w_shortcut
+                    && result.len() >= 2
+                    && result[0].eq_ignore_ascii_case(&'w')
+                    && result[1].eq_ignore_ascii_case(&'w')
+                {
+                    result.remove(0);
                 }
                 return result;
             }

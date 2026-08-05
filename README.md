@@ -74,7 +74,7 @@ brew install --cask gonhanh
 |  Nền tảng   | Trạng thái  |                                               Tải xuống                                                | Hướng dẫn                                |
 | :---------: | :---------: | :----------------------------------------------------------------------------------------------------: | :--------------------------------------- |
 |  **macOS**  | ✅ Sẵn sàng | [📥 Tải GoNhanh.dmg](https://github.com/khaphanspace/gonhanh.org/releases/latest/download/GoNhanh.dmg) | [Xem hướng dẫn](docs/install-macos.md)   |
-|  **Linux**  |   🧪 Beta   |                                                   —                                                    | [Xem hướng dẫn](docs/install-linux.md)   |
+| **Linux x86_64** | 🧪 Beta | [📥 Tải gonhanh-linux.tar.gz](https://github.com/khaphanspace/gonhanh.org/releases/latest/download/gonhanh-linux.tar.gz) | [Xem hướng dẫn](docs/install-linux.md) |
 | **Windows** |   🧪 Beta   |                                                   —                                                    | [Xem hướng dẫn](docs/install-windows.md) |
 
 <details>

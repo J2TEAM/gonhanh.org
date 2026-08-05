@@ -5,8 +5,74 @@ mod common;
 use common::{telex, telex_auto_restore, vni};
 use gonhanh_core::data::keys;
 use gonhanh_core::engine::shortcut::Shortcut;
-use gonhanh_core::engine::Engine;
+use gonhanh_core::engine::{Action, Engine};
 use gonhanh_core::utils::type_word;
+
+fn type_physical_events(engine: &mut Engine, input: &[(u16, char, bool, bool)]) -> String {
+    let mut screen = String::new();
+
+    for &(key, typed, caps, shift) in input {
+        let result = engine.on_key_ext(key, caps, false, shift);
+        if result.action == Action::Send as u8 {
+            for _ in 0..result.backspace {
+                screen.pop();
+            }
+            for index in 0..result.count as usize {
+                screen.push(char::from_u32(result.chars[index]).expect("valid engine output"));
+            }
+        } else {
+            screen.push(typed);
+        }
+    }
+
+    screen
+}
+
+#[test]
+fn issue410_physical_shift_e_preserves_camel_case_word() {
+    let mut engine = Engine::new();
+    engine.set_english_auto_restore(true);
+
+    // The platform reports the uppercase E from a physical Shift+E keypress
+    // with both caps and shift set. Shift key-down/up events are not forwarded
+    // to the core; their state is carried by this E event.
+    let input = [
+        (keys::U, 'u', false, false),
+        (keys::S, 's', false, false),
+        (keys::E, 'e', false, false),
+        (keys::E, 'E', true, true),
+        (keys::F, 'f', false, false),
+        (keys::F, 'f', false, false),
+        (keys::E, 'e', false, false),
+        (keys::C, 'c', false, false),
+        (keys::T, 't', false, false),
+    ];
+
+    assert_eq!(type_physical_events(&mut engine, &input), "useEffect");
+}
+
+#[test]
+fn shifted_case_boundary_preserves_vietnamese_telex_prefix() {
+    let mut engine = Engine::new();
+    engine.set_english_auto_restore(true);
+    let input = [
+        (keys::T, 't', false, false),
+        (keys::I, 'i', false, false),
+        (keys::E, 'e', false, false),
+        (keys::E, 'e', false, false),
+        (keys::N, 'n', false, false),
+        (keys::G, 'g', false, false),
+        (keys::S, 's', false, false),
+        (keys::V, 'V', true, true),
+        (keys::I, 'i', false, false),
+        (keys::E, 'e', false, false),
+        (keys::E, 'e', false, false),
+        (keys::J, 'j', false, false),
+        (keys::T, 't', false, false),
+    ];
+
+    assert_eq!(type_physical_events(&mut engine, &input), "tiếngViệt");
+}
 
 // =============================================================================
 // BUG 1: "did" -> expect "đi"
