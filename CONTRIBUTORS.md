@@ -1259,9 +1259,9 @@ Những người đã báo lỗi, góp ý, và thảo luận giúp định hình
       </a>
     </td>
     <td align="center">
-      <a href="https://github.com/duyxyz">
+      <a href="https://github.com/3ky4r0">
         <img src="https://avatars.githubusercontent.com/u/217141310?u=d4228fae167ef49b81166ce6fb3fc8cc3b9c6c81&v=4" width="50" style="border-radius:50%"/><br/>
-        <b>duyxyz</b>
+        <b>3ky4r0</b>
       </a>
     </td>
   </tr>
@@ -1299,6 +1299,6 @@ Những người đã báo lỗi, góp ý, và thảo luận giúp định hình
 
 ---
 
-*Được cập nhật tự động · Lần cuối: 07/08/2026*
+*Được cập nhật tự động · Lần cuối: 08/08/2026*
 
 </div>
